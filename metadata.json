@@ -1,0 +1,8 @@
+{
+  "name": "LiveVoice",
+  "description": "Real-time speech translation broadcast tool where attendees join via a shared link or QR code to hear live voice translations in their own preferred languages.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
