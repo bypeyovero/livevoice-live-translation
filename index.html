@@ -436,36 +436,45 @@ function selectSpeakerLang(el) {
 // ══════════════════════════════════════════════
 // WAVEFORM VISUALIZER (real mic input)
 // ══════════════════════════════════════════════
+let waveAnalyser = null;
+let waveAudioCtx = null;
+
 function startWaveform(stream) {
   const bars = document.querySelectorAll('#speakerWaveform .waveform-bar');
-  // Remove idle animation — we'll drive it from real audio
   bars.forEach(b => b.classList.remove('animated'));
 
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  analyser = ctx.createAnalyser();
-  analyser.fftSize = 64;
-  const src = ctx.createMediaStreamSource(stream);
-  src.connect(analyser);
+  try {
+    waveAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    waveAnalyser = waveAudioCtx.createAnalyser();
+    waveAnalyser.fftSize = 64;
+    const src = waveAudioCtx.createMediaStreamSource(stream);
+    src.connect(waveAnalyser);
 
-  const bufferLen = analyser.frequencyBinCount;
-  const dataArr   = new Uint8Array(bufferLen);
-  const numBars   = bars.length;
+    const bufferLen = waveAnalyser.frequencyBinCount;
+    const dataArr   = new Uint8Array(bufferLen);
+    const numBars   = bars.length;
 
-  function draw() {
-    animFrameId = requestAnimationFrame(draw);
-    analyser.getByteFrequencyData(dataArr);
-    for (let i = 0; i < numBars; i++) {
-      const idx   = Math.floor(i * bufferLen / numBars);
-      const value = dataArr[idx];
-      const h     = Math.max(4, (value / 255) * 52);
-      bars[i].style.height = h + 'px';
+    function draw() {
+      if (!waveAnalyser) return; // stop if cleaned up
+      animFrameId = requestAnimationFrame(draw);
+      waveAnalyser.getByteFrequencyData(dataArr);
+      for (let i = 0; i < numBars; i++) {
+        const idx   = Math.floor(i * bufferLen / numBars);
+        const value = dataArr[idx];
+        const h     = Math.max(4, (value / 255) * 52);
+        bars[i].style.height = h + 'px';
+      }
     }
+    draw();
+  } catch(e) {
+    console.warn('Waveform init failed:', e);
   }
-  draw();
 }
 
 function stopWaveform() {
   if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+  waveAnalyser = null;
+  if (waveAudioCtx) { try { waveAudioCtx.close(); } catch(e) {} waveAudioCtx = null; }
   const bars = document.querySelectorAll('#speakerWaveform .waveform-bar');
   bars.forEach(b => { b.style.height = '4px'; });
 }
@@ -597,7 +606,54 @@ function appendTranscript(elId, icon, text) {
 }
 
 function startAudioCapture() {
+  // Use AudioWorklet instead of deprecated ScriptProcessorNode
   audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+
+  // Inline AudioWorklet processor as a Blob URL to avoid deprecated ScriptProcessorNode
+  const workletCode = `
+    class PCMProcessor extends AudioWorkletProcessor {
+      process(inputs) {
+        const input = inputs[0];
+        if (input && input[0]) {
+          this.port.postMessage(input[0]);
+        }
+        return true;
+      }
+    }
+    registerProcessor('pcm-processor', PCMProcessor);
+  `;
+  const blob = new Blob([workletCode], { type: 'application/javascript' });
+  const workletUrl = URL.createObjectURL(blob);
+
+  audioContext.audioWorklet.addModule(workletUrl).then(() => {
+    if (!isRecording || !mediaStream) return;
+    const source = audioContext.createMediaStreamSource(mediaStream);
+    processor = new AudioWorkletNode(audioContext, 'pcm-processor');
+
+    processor.port.onmessage = (e) => {
+      if (!isRecording || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const float32 = e.data;
+      const pcm16   = float32ToPcm16(float32);
+      const b64     = arrayBufferToBase64(pcm16.buffer);
+      ws.send(JSON.stringify({
+        realtime_input: {
+          audio: { data: b64, mime_type: 'audio/pcm;rate=16000' }
+        }
+      }));
+    };
+
+    source.connect(processor);
+    processor.connect(audioContext.destination); // AudioWorklet is safe to connect
+    URL.revokeObjectURL(workletUrl);
+  }).catch(err => {
+    console.warn('AudioWorklet failed, falling back to ScriptProcessor:', err);
+    URL.revokeObjectURL(workletUrl);
+    startAudioCaptureFallback();
+  });
+}
+
+// Fallback for browsers that don't support AudioWorklet
+function startAudioCaptureFallback() {
   const source = audioContext.createMediaStreamSource(mediaStream);
   processor = audioContext.createScriptProcessor(4096, 1, 1);
 
@@ -606,7 +662,6 @@ function startAudioCapture() {
     const float32 = e.inputBuffer.getChannelData(0);
     const pcm16   = float32ToPcm16(float32);
     const b64     = arrayBufferToBase64(pcm16.buffer);
-    // Use correct snake_case field names for the API
     ws.send(JSON.stringify({
       realtime_input: {
         audio: { data: b64, mime_type: 'audio/pcm;rate=16000' }
@@ -615,8 +670,6 @@ function startAudioCapture() {
   };
 
   source.connect(processor);
-  // Connect processor to destination to keep the AudioContext alive (required by Chrome)
-  // Volume is set to 0 to prevent feedback
   const gainNode = audioContext.createGain();
   gainNode.gain.value = 0;
   processor.connect(gainNode);
