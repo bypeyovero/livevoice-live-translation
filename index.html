@@ -4,6 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LiveVoice — Real-Time Broadcast Translation</title>
+  <style>
+    .watermark {
+      position: fixed;
+      bottom: 14px;
+      right: 18px;
+      font-size: 12px;
+      font-weight: 600;
+      color: rgba(107,107,107,0.5);
+      letter-spacing: 0.3px;
+      z-index: 9999;
+      pointer-events: none;
+      font-family: 'Montserrat', sans-serif;
+    }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -709,6 +723,7 @@
 </div>
 
 <!-- QR Code library -->
+<div class="watermark">@bypeyovero</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
 <script>
@@ -894,15 +909,25 @@ async function startRecording() {
   };
 
   ws.onerror = (e) => {
-    setStatus('', 'Error');
-    stopRecording();
-    alert('Connection error. Please check your API key and try again.');
+    console.error('WebSocket error:', e);
+    // Don't stop recording on error — let onclose handle reconnect
+    setStatus('', 'Connection issue...');
   };
 
-  ws.onclose = () => {
-    if (isRecording) {
-      setStatus('', 'Disconnected');
-      stopRecording();
+  ws.onclose = (event) => {
+    // Only treat as unexpected disconnect if we were actively recording
+    // and the close was not initiated by us (code 1000 = normal closure)
+    if (isRecording && event.code !== 1000) {
+      setStatus('', 'Reconnecting...');
+      // Auto-reconnect after 1.5 seconds
+      setTimeout(() => {
+        if (isRecording) {
+          cleanupAudio();
+          startRecording();
+        }
+      }, 1500);
+    } else if (!isRecording) {
+      setStatus('', 'Ready');
     }
   };
 }
@@ -958,7 +983,8 @@ function startAudioCapture() {
   };
 
   source.connect(processor);
-  processor.connect(audioContext.destination);
+  // Do NOT connect processor to destination to avoid audio feedback
+  // processor.connect(audioContext.destination);
 }
 
 function float32ToPcm16(float32Array) {
@@ -1015,14 +1041,18 @@ async function processAudioQueue() {
   }
 }
 
-function stopRecording() {
-  isRecording = false;
-  updateMicUI(false);
-  setStatus('', 'Ready');
+function cleanupAudio() {
   if (ws) { try { ws.close(); } catch(e) {} ws = null; }
   if (processor) { try { processor.disconnect(); } catch(e) {} processor = null; }
   if (audioContext) { try { audioContext.close(); } catch(e) {} audioContext = null; }
   if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+}
+
+function stopRecording() {
+  isRecording = false;
+  updateMicUI(false);
+  setStatus('', 'Ready');
+  cleanupAudio();
 }
 
 function updateMicUI(recording) {
@@ -1101,6 +1131,8 @@ function stopAttendee() {
   document.getElementById('attendeeStatusDot').className = 'status-dot';
   document.getElementById('attendeeStatusText').textContent = 'Disconnected';
   document.getElementById('waveBars').classList.add('paused');
+  // Return to landing page
+  show('landing');
 }
 
 // ══════════════════════════════════════════════════════════════
