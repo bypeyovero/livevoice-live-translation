@@ -8,27 +8,70 @@ Powered by **Gemini 3.5 Live Translate API**
 
 ## What This App Does
 
-- **Speaker** starts a session, speaks in their language (Mandarin, English, Khmer, Indonesian)
+- **Speaker** starts a session, speaks in their language (Mandarin, English, Khmer, Indonesian, Japanese, Spanish)
 - **Attendees** open the shared link or scan the QR code, choose their language, and hear the translation live
-- Supports: 🇨🇳 Mandarin · 🇬🇧 English · 🇰🇭 Khmer · 🇮🇩 Indonesian · 🇯🇵 Japanese
+- Supports: 🇨🇳 Mandarin · 🇬🇧 English · 🇰🇭 Khmer · 🇮🇩 Indonesian · 🇯🇵 Japanese · 🇪🇸 Spanish · 🇫🇷 French · 🇩🇪 German · 🇰🇷 Korean · 🇻🇳 Vietnamese · 🇹🇭 Thai
 
 ---
 
-## How to Deploy to Netlify (5 minutes)
+## Tech Stack
 
-### Option A — Drag & Drop (Easiest)
-1. Go to [netlify.com](https://netlify.com) and log in
-2. Click **"Add new site" → "Deploy manually"**
-3. Drag the entire `live-translate-app` folder into the deploy area
-4. Done — you get a public URL like `https://yoursite.netlify.app`
+- **React 19 + TypeScript + Vite** (frontend)
+- **Express + Node.js** (backend server)
+- **WebSocket (ws)** for real-time audio streaming
+- **Gemini 3.5 Live Translate API** for real-time translation
+- **Tailwind CSS + Framer Motion** for UI
+- **Firebase** for room management
 
-### Option B — Via GitHub
-1. Push this folder to a GitHub repository
-2. In Netlify: **"Add new site" → "Import from Git"**
-3. Connect your GitHub repo
-4. Build settings: leave blank (no build command needed)
-5. Publish directory: `.` (root)
-6. Deploy
+---
+
+## Deploy to Railway (Recommended — Free, Supports WebSocket)
+
+Railway is the best platform for this app because it supports persistent WebSocket connections, which are required for real-time audio streaming.
+
+### Step 1 — Create a Railway account
+1. Go to [railway.com](https://railway.com) and sign up (free)
+2. Connect your GitHub account when prompted
+
+### Step 2 — Create a new project
+1. Click **"New Project"**
+2. Select **"Deploy from GitHub repo"**
+3. Choose **`bypeyovero/livevoice-live-translation`**
+4. Railway will auto-detect the Node.js app and start deploying
+
+### Step 3 — Set environment variables
+In your Railway project dashboard, go to **Variables** tab and add:
+
+| Variable | Value |
+|---|---|
+| `GEMINI_API_KEY` | Your Gemini API key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `NODE_ENV` | `production` |
+
+### Step 4 — Get your public URL
+1. Go to **Settings → Networking → Generate Domain**
+2. Railway gives you a free URL like `livevoice-production.up.railway.app`
+3. Share this URL with your attendees!
+
+---
+
+## Local Development
+
+```bash
+# Clone the repo
+git clone https://github.com/bypeyovero/livevoice-live-translation.git
+cd livevoice-live-translation
+
+# Install dependencies
+npm install
+
+# Create .env file
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY
+
+# Start development server
+npm run dev
+# Open http://localhost:3000
+```
 
 ---
 
@@ -37,16 +80,16 @@ Powered by **Gemini 3.5 Live Translate API**
 ### As Speaker
 1. Open the app URL
 2. Click **"Start as Speaker"**
-3. Enter your Gemini API Key when prompted (first time only, stored in browser session)
+3. Enter your room code or use the auto-generated one
 4. Select your speaking language
 5. Share the link or QR code with your audience
-6. Tap the microphone button to start broadcasting
+6. Click **"Launch Live Broadcast Room"** to start
 
 ### As Attendee
 1. Open the shared link (or scan QR code)
-2. Choose your preferred listening language
-3. Click **"Start Listening"**
-4. You will hear the speaker's voice translated in real-time
+2. Enter the room code if prompted
+3. Choose your preferred listening language
+4. Live translation will appear automatically
 
 ---
 
@@ -55,41 +98,35 @@ Powered by **Gemini 3.5 Live Translate API**
 1. Go to [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
 2. Click **"Create API key"**
 3. Copy the key (starts with `AIza...`)
-4. Paste it into the app when prompted
-
-**Free tier** is sufficient for business meetings and demos.
+4. Add it to Railway environment variables (not in the app UI)
 
 ---
 
 ## Supported Languages
 
-| Language | Code | Input | Output |
-|---|---|---|---|
-| Mandarin Chinese | `zh` | ✅ | ✅ |
-| English | `en` | ✅ | ✅ |
-| Khmer (Cambodian) | `km` | ✅ | ✅ |
-| Indonesian | `id` | ✅ | ✅ |
-| Japanese | `ja` | ✅ | ✅ |
+| Language | Code |
+|---|---|
+| Mandarin Chinese | `zh` |
+| English | `en` |
+| Khmer (Cambodian) | `km` |
+| Indonesian | `id` |
+| Japanese | `ja` |
+| Spanish | `es` |
+| French | `fr` |
+| German | `de` |
+| Korean | `ko` |
+| Vietnamese | `vi` |
+| Thai | `th` |
 
 ---
 
 ## Important Notes
 
-- The **speaker** needs a Gemini API Key (free from Google AI Studio)
-- **Attendees** do not need an API key — just open the link
 - Works best with **headphones** to prevent audio feedback
 - Keep the browser tab open during the session
 - For China users: requires VPN to access Google services
+- The API key is stored securely on the server — attendees never see it
 
 ---
 
-## Built With
-
-- Gemini 3.5 Live Translate API (WebSocket)
-- Vanilla HTML/CSS/JavaScript (no framework)
-- QRCode.js for QR generation
-- Montserrat font (Google Fonts)
-
----
-
-*Built for ja-vie.com — Live Translation Tool*
+*Built by [@bypeyovero](https://github.com/bypeyovero) — LiveVoice Live Translation Tool*
